@@ -75,15 +75,79 @@ data "aws_ami" "aws-nat" {
 
 resource "aws_vpc" "web-vpc" {
   cidr_block = var.web_network_address_space[terraform.workspace]
+  assign_generated_ipv6_cidr_block = true
   tags = {
     Name = "web-vpc"
   }
+}
+
+resource "aws_iam_role" "flowlogs-role" {
+  name = "flowlogs-role"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "vpc-flow-logs.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy" "flowlogs-role-policy" {
+  name = "flowlogs-role-policy"
+  role = aws_iam_role.flowlogs-role.id
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_cloudwatch_log_group" "flowlog" {
+  name = "flowlog"
+}
+
+resource "aws_flow_log" "web-vpc-flowlogs-accepted" {
+  iam_role_arn    = aws_iam_role.flowlogs-role.arn
+  log_destination = aws_cloudwatch_log_group.flowlog.arn
+  traffic_type    = "ACCEPT"
+  vpc_id          = aws_vpc.web-vpc.id
+}
+
+resource "aws_flow_log" "web-vpc-flowlogs-rejected" {
+  iam_role_arn    = aws_iam_role.flowlogs-role.arn
+  log_destination = aws_cloudwatch_log_group.flowlog.arn
+  traffic_type    = "REJECT"
+  vpc_id          = aws_vpc.web-vpc.id
 }
 
 resource "aws_subnet" "web-subnet" {
   count      = var.web_subnet_count[terraform.workspace]
   vpc_id     = aws_vpc.web-vpc.id
   cidr_block = cidrsubnet(var.web_network_address_space[terraform.workspace], 8, count.index % var.web_subnet_count[terraform.workspace])
+  ipv6_cidr_block = cidrsubnet(aws_vpc.web-vpc.ipv6_cidr_block, 8, count.index % var.web_subnet_count[terraform.workspace])
   availability_zone = data.aws_availability_zones.available.names[count.index % var.web_subnet_count[terraform.workspace]]
 
   tags = {
@@ -110,6 +174,12 @@ resource "aws_route_table" "web-rtb" {
 resource "aws_route" "web-route-igw" {
   route_table_id            = aws_route_table.web-rtb.id
   destination_cidr_block    = "0.0.0.0/0"
+  gateway_id                = aws_internet_gateway.web-igw.id
+}
+
+resource "aws_route" "web-route-igw-ipv6" {
+  route_table_id            = aws_route_table.web-rtb.id
+  destination_ipv6_cidr_block = "::/0"
   gateway_id                = aws_internet_gateway.web-igw.id
 }
 
@@ -141,12 +211,14 @@ resource "aws_security_group" "allow_ssh" {
     to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
   }
   egress {
     from_port   = 0
     to_port     = 0
     protocol    = -1
     cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
   }
 }
 
@@ -161,6 +233,7 @@ resource "aws_network_interface" "nginx-eth0" {
   count = var.nginx_instance_count[terraform.workspace]
   subnet_id       = aws_subnet.web-subnet[count.index % var.nginx_instance_count[terraform.workspace]].id
   private_ips     = [cidrhost(aws_subnet.web-subnet[count.index % var.web_subnet_count[terraform.workspace]].cidr_block, 10)]
+  ipv6_address_count = 1
   security_groups = [aws_security_group.allow_ssh.id]
 
   tags = {

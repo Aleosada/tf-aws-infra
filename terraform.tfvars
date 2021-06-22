@@ -1,8 +1,16 @@
+aws_access_key = "AKIAVETWKZY5KAPBLN5U"
+aws_secret_key = "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"
+key_name = "awskeypair"
+private_key_path = "/home/aleosada/.ssh/awskeypair.pem"
+
 web_network_address_space = {
   development = "10.1.0.0/16"
 }
 shared_network_address_space = {
   development = "10.2.0.0/16"
+}
+transit_network_address_space = {
+  development = "10.3.0.0/16"
 }
 nginx_instance_size = {
   development = "t2.micro"

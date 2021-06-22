@@ -15,6 +15,9 @@ variable "web_network_address_space" {
 variable "shared_network_address_space" {
   type = map(string)
 }
+variable "transit_network_address_space" {
+  type = map(string)
+}
 variable "nginx_instance_size" {
   type = map(string)
 }

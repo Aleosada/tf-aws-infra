@@ -4,6 +4,7 @@
 
 resource "aws_vpc" "shared-vpc" {
   cidr_block = var.shared_network_address_space[terraform.workspace]
+  assign_generated_ipv6_cidr_block = true
   tags = {
     Name = "shared-vpc"
   }
@@ -13,6 +14,7 @@ resource "aws_subnet" "shared-priv-subnet" {
   count      = var.shared_priv_subnet_count[terraform.workspace]
   vpc_id     = aws_vpc.shared-vpc.id
   cidr_block = cidrsubnet(var.shared_network_address_space[terraform.workspace], 8, count.index % var.shared_priv_subnet_count[terraform.workspace])
+  ipv6_cidr_block = cidrsubnet(aws_vpc.shared-vpc.ipv6_cidr_block, 8, count.index % var.shared_priv_subnet_count[terraform.workspace])
   availability_zone = data.aws_availability_zones.available.names[count.index % var.shared_priv_subnet_count[terraform.workspace]]
 
   tags = {
@@ -39,12 +41,26 @@ resource "aws_internet_gateway" "shared-igw" {
   }
 }
 
+resource "aws_egress_only_internet_gateway" "eigw" {
+  vpc_id = aws_vpc.shared-vpc.id
+
+  tags = {
+    Name = "eigw"
+  }
+}
+
 resource "aws_route_table" "shared-priv-rtb" {
   vpc_id = aws_vpc.shared-vpc.id
 
   tags = {
     Name = "shared-priv-rtb"
   }
+}
+
+resource "aws_route" "route-shared-priv-eigw" {
+  route_table_id            = aws_route_table.shared-priv-rtb.id
+  destination_ipv6_cidr_block = "::/0"
+  egress_only_gateway_id = aws_egress_only_internet_gateway.eigw.id
 }
 
 resource "aws_route_table_association" "rta-priv-subnet" {
@@ -112,6 +128,13 @@ resource "aws_security_group" "database-sg" {
     protocol    = "icmp"
     cidr_blocks = ["192.168.0.0/16", var.web_network_address_space[terraform.workspace], var.shared_network_address_space[terraform.workspace]]
   }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = -1
+    cidr_blocks = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
 }
 
 resource "aws_security_group" "nat-sg" {
@@ -145,6 +168,7 @@ resource "aws_instance" "db" {
   instance_type          = var.db_instance_size[terraform.workspace]
   key_name               = var.key_name
   subnet_id              = aws_subnet.shared-priv-subnet[count.index % var.db_instance_count[terraform.workspace]].id
+  ipv6_address_count     = 1
   security_groups        = [aws_security_group.database-sg.id]
 
   tags = {
