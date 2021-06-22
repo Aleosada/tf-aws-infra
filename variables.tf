@@ -2,8 +2,6 @@
 # VARIABLES
 ##################################################################################
 
-variable "aws_access_key" {}
-variable "aws_secret_key" {}
 variable "private_key_path" {}
 variable "key_name" {}
 variable "region" {
@@ -44,4 +42,15 @@ variable "shared_priv_subnet_count" {
 }
 variable "shared_pub_subnet_count" {
   type = map(number)
+}
+
+##################################################################################
+# LOCALS
+##################################################################################
+
+locals {
+  common_tags = {
+    Environment = terraform.workspace
+    Owner       = "alenxadre.osada"
+  }
 }

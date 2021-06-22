@@ -16,8 +16,6 @@ terraform {
 ##################################################################################
 
 provider "aws" {
-  access_key = var.aws_access_key
-  secret_key = var.aws_secret_key
   region = var.region
 }
 
@@ -76,9 +74,7 @@ data "aws_ami" "aws-nat" {
 resource "aws_vpc" "web-vpc" {
   cidr_block = var.web_network_address_space[terraform.workspace]
   assign_generated_ipv6_cidr_block = true
-  tags = {
-    Name = "web-vpc"
-  }
+  tags = merge({ Name = "web-vpc" }, local.common_tags)
 }
 
 resource "aws_iam_role" "flowlogs-role" {
@@ -127,6 +123,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "flowlog" {
   name = "flowlog"
+  tags = local.common_tags
 }
 
 resource "aws_flow_log" "web-vpc-flowlogs-accepted" {
@@ -134,6 +131,7 @@ resource "aws_flow_log" "web-vpc-flowlogs-accepted" {
   log_destination = aws_cloudwatch_log_group.flowlog.arn
   traffic_type    = "ACCEPT"
   vpc_id          = aws_vpc.web-vpc.id
+  tags = local.common_tags
 }
 
 resource "aws_flow_log" "web-vpc-flowlogs-rejected" {
@@ -141,6 +139,7 @@ resource "aws_flow_log" "web-vpc-flowlogs-rejected" {
   log_destination = aws_cloudwatch_log_group.flowlog.arn
   traffic_type    = "REJECT"
   vpc_id          = aws_vpc.web-vpc.id
+  tags = local.common_tags
 }
 
 resource "aws_subnet" "web-subnet" {
@@ -150,25 +149,19 @@ resource "aws_subnet" "web-subnet" {
   ipv6_cidr_block = cidrsubnet(aws_vpc.web-vpc.ipv6_cidr_block, 8, count.index % var.web_subnet_count[terraform.workspace])
   availability_zone = data.aws_availability_zones.available.names[count.index % var.web_subnet_count[terraform.workspace]]
 
-  tags = {
-    Name = "web-subnet-${count.index}"
-  }
+  tags = merge({ Name = "web-subnet-${count.index}" }, local.common_tags)
 }
 
 resource "aws_internet_gateway" "web-igw" {
   vpc_id = aws_vpc.web-vpc.id
 
-  tags = {
-    Name = "web-igw"
-  }
+  tags = merge({ Name = "web-igw" }, local.common_tags)
 }
 
 resource "aws_route_table" "web-rtb" {
   vpc_id = aws_vpc.web-vpc.id
 
-  tags = {
-    Name = "web-rtb"
-  }
+  tags = merge({ Name = "web-rtb" }, local.common_tags)
 }
 
 resource "aws_route" "web-route-igw" {
@@ -220,6 +213,7 @@ resource "aws_security_group" "allow_ssh" {
     cidr_blocks = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
+  tags = local.common_tags
 }
 
 resource "aws_eip" "nginx-pub-eip" {
@@ -227,6 +221,7 @@ resource "aws_eip" "nginx-pub-eip" {
   vpc = true
   associate_with_private_ip = cidrhost(aws_subnet.web-subnet[count.index % var.nginx_instance_count[terraform.workspace]].cidr_block, 10)
   depends_on                = [aws_internet_gateway.web-igw]
+  tags = local.common_tags
 }
 
 resource "aws_network_interface" "nginx-eth0" {
@@ -236,9 +231,7 @@ resource "aws_network_interface" "nginx-eth0" {
   ipv6_address_count = 1
   security_groups = [aws_security_group.allow_ssh.id]
 
-  tags = {
-    Name = "nginx-eth-${count.index}"
-  }
+  tags = merge({ Name = "nginx-eth-${count.index}" }, local.common_tags)
 }
 
 resource "aws_eip_association" "eip_assoc" {
@@ -273,7 +266,5 @@ resource "aws_instance" "nginx" {
     ]
   }
 
-  tags = {
-    Name = "nginx-${count.index}"
-  }
+  tags = merge({ Name = "nginx-${count.index}" }, local.common_tags)
 }

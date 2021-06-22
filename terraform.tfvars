@@ -1,7 +1,5 @@
-aws_access_key = ""
-aws_secret_key = ""
-key_name = ""
-private_key_path = ""
+key_name = "awskeypair"
+private_key_path = "/home/aleosada/.ssh/awskeypair.pem"
 
 web_network_address_space = {
   development = "10.1.0.0/16"
