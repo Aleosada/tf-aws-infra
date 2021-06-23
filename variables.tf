@@ -51,6 +51,6 @@ variable "shared_pub_subnet_count" {
 locals {
   common_tags = {
     Environment = terraform.workspace
-    Owner       = "alenxadre.osada"
+    Owner       = "alexandre.osada"
   }
 }
